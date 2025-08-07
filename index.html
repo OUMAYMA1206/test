@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title data-translate="page_title">Advanced H₂ System Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+    <style>
+        /* CSS Variables for theming */
+        :root { /* Dark Theme (Default) */
+            --bg-color: #111827;
+            --card-bg-color: #1f2937;
+            --sidebar-bg-color: #1f2937;
+            --text-color: #d1d5db;
+            --text-color-strong: #f9fafb;
+            --border-color: #374151;
+            --primary-color: #34d399;
+            --pv-color: #fbbf24;
+            --truck-color: #fb7185;
+            --storage-color: #60a5fa;
+            --grid-color: #ef4444;
+            --battery-color: #34d399;
+            --h2-grid-color: #a855f7;
+            --electrolyzer-color: #818cf8;
+            --compressor-color: #f472b6;
+        }
+
+        html.light { /* Light Theme */
+            --bg-color: #f3f4f6;
+            --card-bg-color: #ffffff;
+            --sidebar-bg-color: #ffffff;
+            --text-color: #374151;
+            --text-color-strong: #111827;
+            --border-color: #e5e7eb;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: 'Inter', sans-serif;
+            transition: background-color 0.3s, color 0.3s;
+        }
+        .card {
+            background-color: var(--card-bg-color);
+            border: 1px solid var(--border-color);
+            border-radius: 0.75rem;
+            padding: 1.5rem;
+            transition: background-color 0.3s, border-color 0.3s;
+        }
+        .kpi-value {
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--text-color-strong);
+        }
+        .kpi-label {
+            font-size: 0.875rem;
+            color: var(--text-color);
+            margin-top: 0.25rem;
+        }
+        h1, h2, h3 {
+            color: var(--text-color-strong);
+            font-weight: 700;
+        }
+        select, .button {
+            background-color: var(--card-bg-color);
+            border: 1px solid var(--border-color);
+            color: var(--text-color-strong);
+            border-radius: 0.5rem;
+            padding: 0.5rem 1rem;
+            transition: background-color 0.3s, border-color 0.3s;
+        }
+        .error-box {
+            padding: 2em;
+            margin: 2em;
+            background-color: #4c1d1d;
+            border: 2px solid #ef4444;
+            color: #fecaca;
+            font-family: monospace;
+            white-space: pre-wrap;
+            border-radius: 0.5rem;
+        }
+        .sidebar {
+            background-color: var(--sidebar-bg-color);
+            border-right: 1px solid var(--border-color);
+        }
+    </style>
+</head>
+<body class="min-h-screen">
+    <script id="data-hourly" type="application/json">{{ data_hourly_data | safe }}</script>
+    <script id="data-summary" type="application/json">{{ annual_summary_data | safe }}</script>
+    <script id="data-params" type="application/json">{{ parameters_data | safe }}</script>
+
+    <div class="flex h-screen">
+        <aside class="sidebar w-72 p-6 flex-shrink-0 flex flex-col justify-between">
+            <div>
+                <h2 class="text-2xl font-bold mb-6" data-translate="sidebar_title">Controls</h2>
+                <div class="space-y-4">
+                    <div>
+                        <label for="month-selector" class="block text-sm font-medium mb-1" data-translate="month_selector_label">Monthly Analysis</label>
+                        <select id="month-selector" class="w-full"></select>
+                    </div>
+                     <div>
+                        <h3 class="text-lg font-semibold mt-8 mb-2" data-translate="parameters_title">Input Parameters</h3>
+                        <div id="parameters-list" class="text-sm space-y-2 max-h-96 overflow-y-auto pr-2"></div>
+                    </div>
+                </div>
+            </div>
+            <div>
+                 <p id="data-status" class="text-sm mt-4 text-yellow-400">Initializing...</p>
+            </div>
+        </aside>
+
+        <main class="flex-1 p-8 overflow-y-auto">
+            <header class="flex justify-between items-center mb-8">
+                <h1 class="text-3xl font-bold" data-translate="main_title">Complete Hydrogen System Dashboard</h1>
+                <div class="flex items-center space-x-4">
+                    <select id="language-selector" class="button">
+                        <option value="en">English</option>
+                        <option value="fr">Français</option>
+                    </select>
+                    <button id="theme-toggle" class="button w-10 h-10 flex items-center justify-center">
+                        <svg id="theme-icon-light" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
+                        <svg id="theme-icon-dark" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" /></svg>
+                    </button>
+                </div>
+            </header>
+
+            <div id="dashboard-content">
+                <section class="mb-8">
+                    <h2 class="text-2xl mb-4 font-bold" data-translate="annual_overview_title">Annual Performance Overview</h2>
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        <div class="card text-center"><canvas id="renewableShareGauge"></canvas><div class="kpi-label mt-2" data-translate="kpi_renewable_share"></div></div>
+                        <div class="card text-center"><canvas id="co2RatioGauge"></canvas><div class="kpi-label mt-2" data-translate="kpi_co2_ratio"></div></div>
+                        <div class="card text-center justify-center flex flex-col"><div class="kpi-value" id="total-h2">...</div><div class="kpi-label" data-translate="kpi_total_h2"></div></div>
+                        <div class="card text-center justify-center flex flex-col"><div class="kpi-value" id="total-electrolyzer">...</div><div class="kpi-label" data-translate="kpi_electrolyzer_use"></div></div>
+                        <div class="card text-center justify-center flex flex-col"><div class="kpi-value" id="total-grid">...</div><div class="kpi-label" data-translate="kpi_grid_use"></div></div>
+                        <div class="card text-center justify-center flex flex-col"><div class="kpi-value" id="total-compressor">...</div><div class="kpi-label" data-translate="kpi_compressor_use"></div></div>
+                    </div>
+                </section>
+
+                <section class="card">
+                    <h2 class="text-2xl font-bold mb-6" data-translate="monthly_analysis_title">Detailed Monthly Analysis</h2>
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                        <div class="h-[400px]"><canvas id="dailyH2ProdChart"></canvas></div>
+                        <div class="h-[400px]"><canvas id="dailyDestinationChart"></canvas></div>
+                        <div class="h-[400px]"><canvas id="hourlyEnergyFlowsChart"></canvas></div>
+                        <div class="h-[400px]"><canvas id="dailyH2SourceChart"></canvas></div>
+                        <div class="h-[400px]"><canvas id="hourlyTruckFillingChart"></canvas></div>
+                        <div class="h-[400px]"><canvas id="dailyEnergyConsumptionChart"></canvas></div>
+                        <div class="h-[400px]"><canvas id="hourlyH2StorageChart"></canvas></div>
+                        <div class="h-[400px]"><canvas id="hourlyBatterySOCChart"></canvas></div>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    let HOURLY_DATA, ANNUAL_SUMMARY, PARAMETERS;
+    let currentLanguage = 'en';
+    const charts = {};
+
+    // **FIX IS HERE**: Declaring icon variables in the main scope
+    const lightIcon = document.getElementById('theme-icon-light');
+    const darkIcon = document.getElementById('theme-icon-dark');
+
+    // --- 1. TRANSLATION DICTIONARY ---
+    const translations = {
+        en: {
+            locale: 'en-US',
+            months: ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"],
+            page_title: "Advanced H₂ System Dashboard",
+            main_title: "Complete Hydrogen System Dashboard",
+            sidebar_title: "Controls",
+            month_selector_label: "Monthly Analysis",
+            parameters_title: "Input Parameters",
+            annual_overview_title: "Annual Performance Overview",
+            kpi_renewable_share: "Renewable H₂ Share",
+            kpi_co2_ratio: "CO₂ Emission Ratio (tCO₂/tH₂)",
+            kpi_total_h2: "Total H₂ Production (kg)",
+            kpi_electrolyzer_use: "Electrolyzer Use (MWh)",
+            kpi_grid_use: "Annual Grid Usage (MWh)",
+            kpi_compressor_use: "Compressor Use (MWh)",
+            monthly_analysis_title: "Detailed Monthly Analysis",
+            chart_daily_h2_prod_title: "Daily H₂ Production and CO₂ Ratio",
+            chart_daily_h2_dest_title: "Daily H₂ Destination (kg)",
+            chart_hourly_energy_title: "Hourly Energy Flows & Battery SOC",
+            chart_daily_h2_source_title: "Daily H₂ Source (kg)",
+            chart_hourly_truck_fill_title: "Hourly Truck Filling",
+            chart_daily_energy_cons_title: "Daily Energy Consumption (kWh)",
+            chart_hourly_h2_storage_title: "Hourly H₂ Storage Level (kg)",
+            chart_hourly_battery_soc_title: "Hourly Battery SOC (kWh)",
+            label_h2_prod_kg: "H₂ Produced (kg)",
+            label_co2_ratio: "CO₂ Ratio (tCO₂/tH₂)",
+            label_h2_to_truck: "To Truck (kg)",
+            label_h2_to_storage: "To Storage (kg)",
+            label_h2_kg: "Hydrogen (kg)",
+            label_pv_power: "PV Power (kW)",
+            label_grid_power: "Grid Power (kW)",
+            label_battery_soc_kwh: "Battery SOC (kWh)",
+            label_power_kw: "Power (kW)",
+            label_h2_from_pv: "From PV",
+            label_h2_from_battery: "From Battery",
+            label_h2_from_grid: "From Grid",
+            label_h2_flow_truck: "H₂ Flow to Truck (kg/hr)",
+            label_truck_fill_level: "Truck Fill Level (kg)",
+            label_flow_kghr: "Flow (kg/hr)",
+            label_cumulative_fill_kg: "Cumulative Fill (kg)",
+            label_electrolyzer_kwh: "Electrolyzer (kWh)",
+            label_compressor_kwh: "Compressor (kWh)",
+            label_energy_kwh: "Energy (kWh)",
+            label_storage_kg: "Storage (kg)",
+            parameters: {
+                'battery_capacity_kwh': 'Battery Capacity (kWh)',
+                'battery_soc_initial': 'Initial Battery SOC',
+                'battery_efficiency_ch': 'Battery Charge Efficiency',
+                'battery_efficiency_dis': 'Battery Discharge Efficiency',
+                'battery_max_charge_kw': 'Max Battery Charge (kW)',
+                'battery_max_discharge_kw': 'Max Battery Discharge (kW)',
+                'battery_depth_of_discharge': 'Battery DoD',
+                'electrolyzer_specific_consumption_kwh_per_kg': 'Electrolyzer Consumption (kWh/kg)',
+                'electrolyzer_nominal_capacity_kw': 'Electrolyzer Capacity (kW)',
+                'grid_emission_factor_kgCO2_per_kwh': 'Grid Emission Factor (kgCO₂/kWh)',
+                'co2_threshold_tCO2_per_tH2': 'CO₂ Threshold (tCO₂/tH₂)',
+                'h2_storage_capacity_kg': 'H₂ Storage Capacity (kg)',
+                'h2_storage_initial_kg': 'Initial H₂ Storage (kg)',
+                'compressor_rate_kg_per_h': 'Compressor Rate (kg/h)',
+                'truck_fill_mass_kg': 'Truck Fill Mass (kg)',
+                'h2_storage_min_level_kg': 'Min H₂ Storage Level (kg)',
+                'h2_storage_max_outflow_rate_kg_per_h': 'Max H₂ Outflow (kg/h)',
+                'compressor_power_kw': 'Compressor Power (kW)',
+                'battery_max_charge_soc_limit_percent': 'Max Battery SOC (%)',
+                'battery_min_discharge_soc_limit_percent': 'Min Battery SOC (%)'
+            }
+        },
+        fr: {
+            locale: 'fr-FR',
+            months: ["Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"],
+            page_title: "Tableau de Bord H₂ Avancé",
+            main_title: "Tableau de Bord Complet du Système Hydrogène",
+            sidebar_title: "Contrôles",
+            month_selector_label: "Analyse Mensuelle",
+            parameters_title: "Paramètres d'Entrée",
+            annual_overview_title: "Aperçu des Performances Annuelles",
+            kpi_renewable_share: "Part d'H₂ Renouvelable",
+            kpi_co2_ratio: "Ratio d'Émission CO₂ (tCO₂/tH₂)",
+            kpi_total_h2: "Production Totale d'H₂ (kg)",
+            kpi_electrolyzer_use: "Utilisation Électrolyseur (MWh)",
+            kpi_grid_use: "Utilisation Annuelle du Réseau (MWh)",
+            kpi_compressor_use: "Utilisation Compresseur (MWh)",
+            monthly_analysis_title: "Analyse Mensuelle Détaillée",
+            chart_daily_h2_prod_title: "Production Quotidienne d'H₂ et Ratio CO₂",
+            chart_daily_h2_dest_title: "Destination Quotidienne de l'H₂ (kg)",
+            chart_hourly_energy_title: "Flux Énergétiques Horaires & SOC Batterie",
+            chart_daily_h2_source_title: "Source Quotidienne de l'H₂ (kg)",
+            chart_hourly_truck_fill_title: "Remplissage Horaire du Camion",
+            chart_daily_energy_cons_title: "Consommation d'Énergie Quotidienne (kWh)",
+            chart_hourly_h2_storage_title: "Niveau de Stockage d'H₂ Horaire (kg)",
+            chart_hourly_battery_soc_title: "SOC de la Batterie Horaire (kWh)",
+            label_h2_prod_kg: "H₂ Produit (kg)",
+            label_co2_ratio: "Ratio CO₂ (tCO₂/tH₂)",
+            label_h2_to_truck: "Vers Camion (kg)",
+            label_h2_to_storage: "Vers Stockage (kg)",
+            label_h2_kg: "Hydrogène (kg)",
+            label_pv_power: "Puissance PV (kW)",
+            label_grid_power: "Puissance Réseau (kW)",
+            label_battery_soc_kwh: "SOC Batterie (kWh)",
+            label_power_kw: "Puissance (kW)",
+            label_h2_from_pv: "Depuis PV",
+            label_h2_from_battery: "Depuis Batterie",
+            label_h2_from_grid: "Depuis Réseau",
+            label_h2_flow_truck: "Flux H₂ vers Camion (kg/h)",
+            label_truck_fill_level: "Niveau Remplissage Camion (kg)",
+            label_flow_kghr: "Flux (kg/h)",
+            label_cumulative_fill_kg: "Remplissage Cumulé (kg)",
+            label_electrolyzer_kwh: "Électrolyseur (kWh)",
+            label_compressor_kwh: "Compresseur (kWh)",
+            label_energy_kwh: "Énergie (kWh)",
+            label_storage_kg: "Stockage (kg)",
+            parameters: {
+                'battery_capacity_kwh': 'Capacité Batterie (kWh)',
+                'battery_soc_initial': 'SOC Initial Batterie',
+                'battery_efficiency_ch': 'Efficacité Charge Batterie',
+                'battery_efficiency_dis': 'Efficacité Décharge Batterie',
+                'battery_max_charge_kw': 'Charge Max Batterie (kW)',
+                'battery_max_discharge_kw': 'Décharge Max Batterie (kW)',
+                'battery_depth_of_discharge': 'PdC Batterie',
+                'electrolyzer_specific_consumption_kwh_per_kg': 'Conso. Électrolyseur (kWh/kg)',
+                'electrolyzer_nominal_capacity_kw': 'Capacité Électrolyseur (kW)',
+                'grid_emission_factor_kgCO2_per_kwh': 'Facteur Émission Réseau (kgCO₂/kWh)',
+                'co2_threshold_tCO2_per_tH2': 'Seuil CO₂ (tCO₂/tH₂)',
+                'h2_storage_capacity_kg': 'Capacité Stockage H₂ (kg)',
+                'h2_storage_initial_kg': 'Stockage Initial H₂ (kg)',
+                'compressor_rate_kg_per_h': 'Taux Compresseur (kg/h)',
+                'truck_fill_mass_kg': 'Masse Remplissage Camion (kg)',
+                'h2_storage_min_level_kg': 'Niveau Min Stockage H₂ (kg)',
+                'h2_storage_max_outflow_rate_kg_per_h': 'Flux Sortie Max H₂ (kg/h)',
+                'compressor_power_kw': 'Puissance Compresseur (kW)',
+                'battery_max_charge_soc_limit_percent': 'SOC Max Batterie (%)',
+                'battery_min_discharge_soc_limit_percent': 'SOC Min Batterie (%)'
+            }
+        }
+    };
+
+    // --- 2. CORE FUNCTIONS ---
+    function setLanguage(lang) {
+        currentLanguage = lang;
+        localStorage.setItem('dashboardLanguage', lang);
+        document.querySelectorAll('[data-translate]').forEach(el => {
+            const key = el.getAttribute('data-translate');
+            el.textContent = translations[lang]?.[key] ?? el.textContent;
+        });
+        
+        const monthSelector = document.getElementById('month-selector');
+        const selectedValue = monthSelector.value;
+        const monthNames = translations[currentLanguage].months;
+        monthSelector.querySelectorAll('option').forEach(option => {
+            option.textContent = monthNames[option.value];
+        });
+        monthSelector.value = selectedValue;
+
+        populateSidebarParameters();
+        if (ANNUAL_SUMMARY) populateAnnualOverview();
+        if (monthSelector.value) {
+            updateMonthlyDashboard(parseInt(monthSelector.value, 10));
+        }
+    }
+
+    function applyTheme(theme) {
+        if (theme === 'light') {
+            document.documentElement.classList.add('light');
+            lightIcon.classList.add('hidden');
+            darkIcon.classList.remove('hidden');
+        } else {
+            document.documentElement.classList.remove('light');
+            lightIcon.classList.remove('hidden');
+            darkIcon.classList.add('hidden');
+        }
+        Object.values(charts).forEach(chart => { if (chart) chart.destroy(); });
+        
+        if (typeof updateMonthlyDashboard !== 'undefined' && document.getElementById('month-selector').value) {
+            populateAnnualOverview();
+            updateMonthlyDashboard(parseInt(document.getElementById('month-selector').value, 10));
+        }
+    }
+
+    function populateSidebarParameters() {
+        const paramsList = document.getElementById('parameters-list');
+        paramsList.innerHTML = '';
+        const T = translations[currentLanguage];
+        if (!PARAMETERS) return;
+        for (const [key, value] of Object.entries(PARAMETERS)) {
+            const p = document.createElement('p');
+            const translatedKey = T.parameters[key] || key.replace(/_/g, ' ');
+            p.innerHTML = `<span class="font-semibold">${translatedKey}:</span> <span class="text-primary-500 float-right">${value}</span>`;
+            paramsList.appendChild(p);
+        }
+    }
+
+    // --- 3. DATA LOADING AND INITIALIZATION ---
+    function initializeDashboard() {
+        try {
+            statusEl.textContent = 'Loading data...';
+            
+            HOURLY_DATA = JSON.parse(document.getElementById('data-hourly').textContent);
+            ANNUAL_SUMMARY = JSON.parse(document.getElementById('data-summary').textContent);
+            PARAMETERS = JSON.parse(document.getElementById('data-params').textContent);
+
+            if (!HOURLY_DATA || HOURLY_DATA.length === 0) throw new Error("Parsed hourly data is empty or invalid.");
+
+            statusEl.textContent = `Successfully loaded ${HOURLY_DATA.length} records.`;
+            statusEl.style.color = '#34d399';
+
+            const themeToggle = document.getElementById('theme-toggle');
+            const monthSelector = document.getElementById('month-selector');
+            const langSelector = document.getElementById('language-selector');
+            
+            const availableMonths = [...new Set(HOURLY_DATA.map(d => new Date(d.timestamp).getMonth()))].sort((a,b) => a-b);
+            monthSelector.innerHTML = '';
+            availableMonths.forEach(idx => {
+                const option = document.createElement('option');
+                option.value = idx;
+                monthSelector.appendChild(option);
+            });
+            
+            themeToggle.addEventListener('click', () => {
+                const newTheme = document.documentElement.classList.contains('light') ? 'dark' : 'light';
+                localStorage.setItem('dashboardTheme', newTheme);
+                applyTheme(newTheme);
+            });
+            monthSelector.addEventListener('change', (e) => updateMonthlyDashboard(parseInt(e.target.value, 10)));
+            langSelector.addEventListener('change', (e) => setLanguage(e.target.value));
+
+            const savedTheme = localStorage.getItem('dashboardTheme') || 'dark';
+            applyTheme(savedTheme);
+            
+            const savedLang = localStorage.getItem('dashboardLanguage') || 'en';
+            langSelector.value = savedLang;
+            setLanguage(savedLang);
+
+        } catch (error) {
+            console.error("Critical error during data loading:", error);
+            const statusEl = document.getElementById('data-status');
+            statusEl.textContent = "Error loading data.";
+            statusEl.style.color = "#ef4444";
+            document.getElementById('dashboard-content').innerHTML = `<div class="error-box"><h2>JavaScript Error</h2><p>The dashboard could not be displayed. Check the browser console.</p><pre>${error.stack}</pre></div>`;
+        }
+    }
+    
+    const statusEl = document.getElementById('data-status');
+    initializeDashboard();
+
+
+    // --- 4. CHARTING AND RENDERING LOGIC ---
+    function getChartColors() {
+        const styles = getComputedStyle(document.documentElement);
+        return {
+            text: styles.getPropertyValue('--text-color'),
+            grid: styles.getPropertyValue('--border-color'),
+            primary: styles.getPropertyValue('--primary-color'),
+            pv: styles.getPropertyValue('--pv-color'),
+            truck: styles.getPropertyValue('--truck-color'),
+            storage: styles.getPropertyValue('--storage-color'),
+            grid_power: styles.getPropertyValue('--grid-color'),
+            battery: styles.getPropertyValue('--battery-color'),
+            h2_grid: styles.getPropertyValue('--h2-grid-color'),
+            electrolyzer: styles.getPropertyValue('--electrolyzer-color'),
+            compressor: styles.getPropertyValue('--compressor-color'),
+            cardBg: styles.getPropertyValue('--card-bg-color'),
+            textStrong: styles.getPropertyValue('--text-color-strong'),
+        };
+    }
+    
+    function populateAnnualOverview() {
+        if (!ANNUAL_SUMMARY || !PARAMETERS) return;
+        const lang = translations[currentLanguage].locale;
+        const formatValue = (value, divisor = 1, digits = 1) => ((value || 0) / divisor).toLocaleString(lang, { maximumFractionDigits: digits });
+
+        document.getElementById('total-h2').textContent = formatValue(ANNUAL_SUMMARY.h2_prod_kg, 1, 0);
+        document.getElementById('total-electrolyzer').textContent = formatValue(ANNUAL_SUMMARY.total_electrolyzer_kwh, 1000, 1);
+        document.getElementById('total-grid').textContent = formatValue(ANNUAL_SUMMARY.grid_draw_kwh, 1000, 1);
+        document.getElementById('total-compressor').textContent = formatValue(ANNUAL_SUMMARY.total_compressor_kwh, 1000, 1);
+        
+        const renewableH2 = (ANNUAL_SUMMARY.h2_from_pv || 0) + (ANNUAL_SUMMARY.h2_from_battery || 0);
+        const renewableShare = (ANNUAL_SUMMARY.h2_prod_kg > 0) ? (renewableH2 / ANNUAL_SUMMARY.h2_prod_kg) * 100 : 0;
+        createGauge('renewableShareGauge', renewableShare, 100, '%');
+
+        const co2Ratio = ANNUAL_SUMMARY.ratio_tco2_tH2 || 0;
+        const co2Threshold = PARAMETERS.co2_threshold_tCO2_per_tH2 || 3.0;
+        createGauge('co2RatioGauge', co2Ratio, co2Threshold);
+    }
+
+    function updateMonthlyDashboard(selectedMonth) {
+        const monthData = HOURLY_DATA.filter(d => new Date(d.timestamp).getMonth() === selectedMonth);
+        if (monthData.length === 0) return;
+        
+        const T = translations[currentLanguage];
+        const COLORS = getChartColors();
+        
+        const dailyData = {};
+        monthData.forEach(d => {
+            const day = new Date(d.timestamp).toISOString().split('T')[0];
+            if (!dailyData[day]) {
+                dailyData[day] = { h2_prod_kg: 0, co2_emitted_kg: 0, h2_from_pv: 0, h2_from_battery: 0, h2_from_grid: 0, h2_to_truck: 0, h2_to_storage: 0, electrolyzer_kwh: 0, compressor_kwh: 0 };
+            }
+            dailyData[day].h2_prod_kg += d.h2_prod_kg || 0;
+            dailyData[day].co2_emitted_kg += d.co2_emitted_kg || 0;
+            dailyData[day].h2_from_pv += d.h2_from_pv || 0;
+            dailyData[day].h2_from_battery += d.h2_from_battery || 0;
+            dailyData[day].h2_from_grid += d.h2_from_grid || 0;
+            dailyData[day].h2_to_truck += d.comp_to_truck_kg || 0;
+            dailyData[day].h2_to_storage += d.comp_to_storage_kg || 0;
+            dailyData[day].electrolyzer_kwh += d.electrolyzer_kwh || 0;
+            dailyData[day].compressor_kwh += d.compressor_kwh || 0;
+        });
+        
+        const dailyLabels = Object.keys(dailyData).sort();
+        const dailyDateObjects = dailyLabels.map(date => new Date(date));
+        const hourlyTimeLabels = monthData.map(d => new Date(d.timestamp));
+
+        // Chart 1: Daily H2 Production
+        createOrUpdateChart('dailyH2ProdChart', T.chart_daily_h2_prod_title, 'bar', {
+            labels: dailyDateObjects,
+            datasets: [
+                { label: T.label_h2_prod_kg, data: dailyLabels.map(day => dailyData[day].h2_prod_kg), backgroundColor: COLORS.storage, yAxisID: 'y' },
+                { label: T.label_co2_ratio, data: dailyLabels.map(day => (dailyData[day].h2_prod_kg > 0) ? (dailyData[day].co2_emitted_kg / 1000) / (dailyData[day].h2_prod_kg / 1000) : 0), type: 'line', borderColor: COLORS.grid_power, borderWidth: 2, pointRadius: 2, yAxisID: 'y1' }
+            ]
+        }, { y: { title: { text: T.label_h2_kg } }, y1: { title: { text: T.label_co2_ratio } } });
+        
+        // Chart 2: Daily H2 Destination
+        createOrUpdateChart('dailyDestinationChart', T.chart_daily_h2_dest_title, 'bar', {
+            labels: dailyDateObjects,
+            datasets: [ { label: T.label_h2_to_truck, data: dailyLabels.map(day => dailyData[day].h2_to_truck), backgroundColor: COLORS.truck, stack: 'dest' }, { label: T.label_h2_to_storage, data: dailyLabels.map(day => dailyData[day].h2_to_storage), backgroundColor: COLORS.storage, stack: 'dest' }]
+        }, { x: { stacked: true }, y: { stacked: true, title: { text: T.label_h2_kg } } });
+
+        // Chart 3: Hourly Energy Flows
+        createOrUpdateChart('hourlyEnergyFlowsChart', T.chart_hourly_energy_title, 'line', {
+            labels: hourlyTimeLabels,
+            datasets: [
+                { label: T.label_pv_power, data: monthData.map(d => d.pv_gen_kw || 0), borderColor: COLORS.pv, backgroundColor: `${COLORS.pv}33`, fill: true, pointRadius: 0, tension: 0.3 },
+                { label: T.label_grid_power, data: monthData.map(d => d.grid_draw_kwh || 0), borderColor: COLORS.grid_power, backgroundColor: `${COLORS.grid_power}33`, fill: true, pointRadius: 0, tension: 0.3 },
+                { label: T.label_battery_soc_kwh, data: monthData.map(d => d.batt_soc_kwh || 0), borderColor: COLORS.battery, fill: false, yAxisID: 'y1', pointRadius: 0, tension: 0.3 }
+            ]
+        }, { x: { time: { unit: 'hour' } }, y: { title: { text: T.label_power_kw } }, y1: { title: { text: T.label_battery_soc_kwh } } });
+        
+        // Chart 4: Daily H2 Source
+        createOrUpdateChart('dailyH2SourceChart', T.chart_daily_h2_source_title, 'bar', {
+            labels: dailyDateObjects, datasets: [ { label: T.label_h2_from_pv, data: dailyLabels.map(day => dailyData[day].h2_from_pv), backgroundColor: COLORS.pv, stack: 'src'}, { label: T.label_h2_from_battery, data: dailyLabels.map(day => dailyData[day].h2_from_battery), backgroundColor: COLORS.battery, stack: 'src'}, { label: T.label_h2_from_grid, data: dailyLabels.map(day => dailyData[day].h2_from_grid), backgroundColor: COLORS.h2_grid, stack: 'src'} ]
+        }, { x: { stacked: true }, y: { stacked: true, title: { text: T.label_h2_kg } } });
+
+        // Chart 5: Hourly Truck Filling
+        createOrUpdateChart('hourlyTruckFillingChart', T.chart_hourly_truck_fill_title, 'bar', {
+            labels: hourlyTimeLabels, datasets: [ { label: T.label_h2_flow_truck, data: monthData.map(d => d.comp_to_truck_kg), backgroundColor: COLORS.truck, yAxisID: 'y' }, { label: T.label_truck_fill_level, data: monthData.map(d => d.truck_fill_kg), type: 'line', borderColor: COLORS.pv, borderWidth: 2, yAxisID: 'y1', pointRadius: 0 } ]
+        }, { x: { time: { unit: 'hour' } }, y: { title: { text: T.label_flow_kghr } }, y1: { title: { text: T.label_cumulative_fill_kg } } });
+        
+        // Chart 6: Daily Energy Consumption (Area Chart)
+        createOrUpdateChart('dailyEnergyConsumptionChart', T.chart_daily_energy_cons_title, 'line', {
+            labels: dailyDateObjects, 
+            datasets: [ 
+                { label: T.label_electrolyzer_kwh, data: dailyLabels.map(day => dailyData[day].electrolyzer_kwh), backgroundColor: `${COLORS.electrolyzer}80`, borderColor: COLORS.electrolyzer, fill: true, stack: 'cons', pointRadius: 0, tension: 0.3 }, 
+                { label: T.label_compressor_kwh, data: dailyLabels.map(day => dailyData[day].compressor_kwh), backgroundColor: `${COLORS.compressor}80`, borderColor: COLORS.compressor, fill: true, stack: 'cons', pointRadius: 0, tension: 0.3 } 
+            ]
+        }, { y: { stacked: true, title: { text: T.label_energy_kwh } } });
+
+        // Chart 7: Hourly H2 Storage
+        createOrUpdateChart('hourlyH2StorageChart', T.chart_hourly_h2_storage_title, 'line', {
+            labels: hourlyTimeLabels, datasets: [{ label: T.label_storage_kg, data: monthData.map(d => d.storage_kg), borderColor: COLORS.storage, backgroundColor: `${COLORS.storage}33`, fill: true, pointRadius: 0, tension: 0.3 }]
+        }, { x: { time: { unit: 'hour' } }, y: { title: { text: T.label_storage_kg } } });
+
+        // Chart 8: Hourly Battery SOC
+        createOrUpdateChart('hourlyBatterySOCChart', T.chart_hourly_battery_soc_title, 'line', {
+            labels: hourlyTimeLabels, datasets: [{ label: T.label_battery_soc_kwh, data: monthData.map(d => d.batt_soc_kwh), borderColor: COLORS.battery, backgroundColor: `${COLORS.battery}33`, fill: true, pointRadius: 0, tension: 0.3 }]
+        }, { x: { time: { unit: 'hour' } }, y: { title: { text: T.label_battery_soc_kwh } } });
+    }
+
+    function createGauge(chartId, value, max, unit = '') {
+        const COLORS = getChartColors();
+        const lang = translations[currentLanguage].locale;
+        const chartConfig = {
+            type: 'doughnut',
+            data: { datasets: [{ data: [value, Math.max(0, max - value)], backgroundColor: [COLORS.primary, `${COLORS.grid}80`], borderWidth: 0, circumference: 180, rotation: -90 }] },
+            options: {
+                responsive: true, maintainAspectRatio: true, cutout: '70%',
+                plugins: {
+                    legend: { display: false }, tooltip: { enabled: false },
+                    title: { display: true, text: `${value.toLocaleString(lang, {maximumFractionDigits: 1})}${unit} / ${max}${unit}`, color: COLORS.text, position: 'bottom', font: {size: 14} }
+                }
+            }
+        };
+        if (charts[chartId]) charts[chartId].destroy();
+        charts[chartId] = new Chart(document.getElementById(chartId).getContext('2d'), chartConfig);
+    }
+    
+    function createOrUpdateChart(chartId, title, type, data, scalesOptions = {}) {
+        const COLORS = getChartColors();
+        const langLocale = translations[currentLanguage].locale;
+        const chartConfig = {
+            type: type,
+            data: data,
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                plugins: {
+                    title: { display: true, text: title, color: COLORS.textStrong, font: { size: 16 } },
+                    legend: { labels: { color: COLORS.text } },
+                    tooltip: { 
+                        backgroundColor: COLORS.cardBg, titleColor: COLORS.textStrong, bodyColor: COLORS.text, borderColor: COLORS.grid, borderWidth: 1,
+                        callbacks: {
+                            title: function(context) {
+                                const d = new Date(context[0].parsed.x);
+                                const timeUnit = context[0].chart.options.scales.x.time.unit;
+                                const options = timeUnit === 'hour' ? { dateStyle: 'medium', timeStyle: 'short' } : { dateStyle: 'full' };
+                                return d.toLocaleString(langLocale, options);
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        type: 'time',
+                        time: { unit: 'day' },
+                        ticks: { 
+                            color: COLORS.text,
+                            callback: function(value) {
+                                const timeUnit = this.chart.options.scales.x.time.unit;
+                                const options = timeUnit === 'hour' ? { hour: '2-digit', minute: '2-digit' } : { month: 'short', day: 'numeric' };
+                                return new Date(value).toLocaleString(langLocale, options);
+                            }
+                        }, 
+                        grid: { color: COLORS.grid },
+                        ...scalesOptions.x
+                    },
+                    y: {
+                        ticks: { color: COLORS.text }, grid: { color: COLORS.grid }, beginAtZero: true,
+                        title: { display: true, color: COLORS.text, ...scalesOptions.y?.title },
+                        ...scalesOptions.y
+                    },
+                    y1: { // Default config for a second y-axis
+                        position: 'right',
+                        ticks: { color: COLORS.text },
+                        grid: { drawOnChartArea: false },
+                        beginAtZero: true,
+                        title: { display: true, color: COLORS.text, ...scalesOptions.y1?.title },
+                        ...scalesOptions.y1
+                    }
+                }
+            }
+        };
+
+        if (charts[chartId]) charts[chartId].destroy();
+        const ctx = document.getElementById(chartId)?.getContext('2d');
+        if (ctx) {
+            charts[chartId] = new Chart(ctx, chartConfig);
+        }
+    }
+});
+</script>
+</body>
+</html>
